@@ -1,0 +1,670 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<link rel="profile" href="https://gmpg.org/xfn/11" />
+	<title>YOONHA KIM</title>
+<meta name='robots' content='max-image-preview:large' />
+
+<!-- Async WordPress.com Remote Login -->
+<script id="wpcom_remote_login_js">
+var wpcom_remote_login_extra_auth = '';
+function wpcom_remote_login_remove_dom_node_id( element_id ) {
+	var dom_node = document.getElementById( element_id );
+	if ( dom_node ) { dom_node.parentNode.removeChild( dom_node ); }
+}
+function wpcom_remote_login_remove_dom_node_classes( class_name ) {
+	var dom_nodes = document.querySelectorAll( '.' + class_name );
+	for ( var i = 0; i < dom_nodes.length; i++ ) {
+		dom_nodes[ i ].parentNode.removeChild( dom_nodes[ i ] );
+	}
+}
+function wpcom_remote_login_final_cleanup() {
+	wpcom_remote_login_remove_dom_node_classes( "wpcom_remote_login_msg" );
+	wpcom_remote_login_remove_dom_node_id( "wpcom_remote_login_key" );
+	wpcom_remote_login_remove_dom_node_id( "wpcom_remote_login_validate" );
+	wpcom_remote_login_remove_dom_node_id( "wpcom_remote_login_js" );
+	wpcom_remote_login_remove_dom_node_id( "wpcom_request_access_iframe" );
+	wpcom_remote_login_remove_dom_node_id( "wpcom_request_access_styles" );
+}
+
+// Watch for messages back from the remote login
+window.addEventListener( "message", function( e ) {
+	if ( e.origin === "https://r-login.wordpress.com" ) {
+		var data = {};
+		try {
+			data = JSON.parse( e.data );
+		} catch( e ) {
+			wpcom_remote_login_final_cleanup();
+			return;
+		}
+
+		if ( data.msg === 'LOGIN' ) {
+			// Clean up the login check iframe
+			wpcom_remote_login_remove_dom_node_id( "wpcom_remote_login_key" );
+
+			var id_regex = new RegExp( /^[0-9]+$/ );
+			var token_regex = new RegExp( /^.*|.*|.*$/ );
+			if (
+				token_regex.test( data.token )
+				&& id_regex.test( data.wpcomid )
+			) {
+				// We have everything we need to ask for a login
+				var script = document.createElement( "script" );
+				script.setAttribute( "id", "wpcom_remote_login_validate" );
+				script.src = '/remote-login.php?wpcom_remote_login=validate'
+					+ '&wpcomid=' + data.wpcomid
+					+ '&token=' + encodeURIComponent( data.token )
+					+ '&host=' + window.location.protocol
+						+ '//' + window.location.hostname;
+				document.body.appendChild( script );
+			}
+
+			return;
+		}
+
+		// Safari ITP, not logged in, so redirect
+		if ( data.msg === 'LOGIN-REDIRECT' ) {
+			window.location = 'https://wordpress.com/log-in?redirect_to=' + window.location.href;
+			return;
+		}
+
+		// Safari ITP, storage access failed, remove the request
+		if ( data.msg === 'LOGIN-REMOVE' ) {
+			var css_zap = 'html { -webkit-transition: margin-top 1s; transition: margin-top 1s; } /* 9001 */ html { margin-top: 0 !important; } * html body { margin-top: 0 !important; } @media screen and ( max-width: 782px ) { html { margin-top: 0 !important; } * html body { margin-top: 0 !important; } }';
+			var style_zap = document.createElement( 'style' );
+			style_zap.type = 'text/css';
+			style_zap.appendChild( document.createTextNode( css_zap ) );
+			document.body.appendChild( style_zap );
+
+			var e = document.getElementById( 'wpcom_request_access_iframe' );
+			e.parentNode.removeChild( e );
+
+			document.cookie = 'wordpress_com_login_access=denied; path=/; max-age=31536000';
+
+			return;
+		}
+
+		// Safari ITP
+		if ( data.msg === 'REQUEST_ACCESS' ) {
+			console.log( 'request access: safari' );
+
+			// Check ITP iframe enable/disable knob
+			if ( wpcom_remote_login_extra_auth !== 'safari_itp_iframe' ) {
+				return;
+			}
+
+			// If we are in a "private window" there is no ITP.
+			var private_window = false;
+			try {
+				var opendb = window.openDatabase( null, null, null, null );
+			} catch( e ) {
+				private_window = true;
+			}
+
+			if ( private_window ) {
+				console.log( 'private window' );
+				return;
+			}
+
+			var iframe = document.createElement( 'iframe' );
+			iframe.id = 'wpcom_request_access_iframe';
+			iframe.setAttribute( 'scrolling', 'no' );
+			iframe.setAttribute( 'sandbox', 'allow-storage-access-by-user-activation allow-scripts allow-same-origin allow-top-navigation-by-user-activation' );
+			iframe.src = 'https://r-login.wordpress.com/remote-login.php?wpcom_remote_login=request_access&origin=' + encodeURIComponent( data.origin ) + '&wpcomid=' + encodeURIComponent( data.wpcomid );
+
+			var css = 'html { -webkit-transition: margin-top 1s; transition: margin-top 1s; } /* 9001 */ html { margin-top: 46px !important; } * html body { margin-top: 46px !important; } @media screen and ( max-width: 660px ) { html { margin-top: 71px !important; } * html body { margin-top: 71px !important; } #wpcom_request_access_iframe { display: block; height: 71px !important; } } #wpcom_request_access_iframe { border: 0px; height: 46px; position: fixed; top: 0; left: 0; width: 100%; min-width: 100%; z-index: 99999; background: #23282d; } ';
+
+			var style = document.createElement( 'style' );
+			style.type = 'text/css';
+			style.id = 'wpcom_request_access_styles';
+			style.appendChild( document.createTextNode( css ) );
+			document.body.appendChild( style );
+
+			document.body.appendChild( iframe );
+		}
+
+		if ( data.msg === 'DONE' ) {
+			wpcom_remote_login_final_cleanup();
+		}
+	}
+}, false );
+
+// Inject the remote login iframe after the page has had a chance to load
+// more critical resources
+window.addEventListener( "DOMContentLoaded", function( e ) {
+	var iframe = document.createElement( "iframe" );
+	iframe.style.display = "none";
+	iframe.setAttribute( "scrolling", "no" );
+	iframe.setAttribute( "id", "wpcom_remote_login_key" );
+	iframe.src = "https://r-login.wordpress.com/remote-login.php"
+		+ "?wpcom_remote_login=key"
+		+ "&origin=aHR0cHM6Ly95b29uaGEubmV0"
+		+ "&wpcomid=180057476"
+		+ "&time=1622124902";
+	document.body.appendChild( iframe );
+}, false );
+</script>
+<link rel='dns-prefetch' href='//s2.wp.com' />
+<link rel='dns-prefetch' href='//yoonhanet.wordpress.com' />
+<link rel='dns-prefetch' href='//s0.wp.com' />
+<link rel='dns-prefetch' href='//s1.wp.com' />
+<link rel='dns-prefetch' href='//wordpress.com' />
+<link rel='dns-prefetch' href='//fonts.googleapis.com' />
+<link rel="alternate" type="application/rss+xml" title="YOONHA KIM &raquo; Feed" href="https://yoonha.net/feed/" />
+<link rel="alternate" type="application/rss+xml" title="YOONHA KIM &raquo; Comments Feed" href="https://yoonha.net/comments/feed/" />
+	<script type="text/javascript">
+		/* <![CDATA[ */
+		function addLoadEvent(func) {
+			var oldonload = window.onload;
+			if (typeof window.onload != 'function') {
+				window.onload = func;
+			} else {
+				window.onload = function () {
+					oldonload();
+					func();
+				}
+			}
+		}
+		/* ]]> */
+	</script>
+			<script type="text/javascript">
+			window._wpemojiSettings = {"baseUrl":"https:\/\/s0.wp.com\/wp-content\/mu-plugins\/wpcom-smileys\/twemoji\/2\/72x72\/","ext":".png","svgUrl":"https:\/\/s0.wp.com\/wp-content\/mu-plugins\/wpcom-smileys\/twemoji\/2\/svg\/","svgExt":".svg","source":{"concatemoji":"https:\/\/s0.wp.com\/wp-includes\/js\/wp-emoji-release.min.js?m=1612197847h&ver=5.7.2"}};
+			!function(e,a,t){var n,r,o,i=a.createElement("canvas"),p=i.getContext&&i.getContext("2d");function s(e,t){var a=String.fromCharCode;p.clearRect(0,0,i.width,i.height),p.fillText(a.apply(this,e),0,0);e=i.toDataURL();return p.clearRect(0,0,i.width,i.height),p.fillText(a.apply(this,t),0,0),e===i.toDataURL()}function c(e){var t=a.createElement("script");t.src=e,t.defer=t.type="text/javascript",a.getElementsByTagName("head")[0].appendChild(t)}for(o=Array("flag","emoji"),t.supports={everything:!0,everythingExceptFlag:!0},r=0;r<o.length;r++)t.supports[o[r]]=function(e){if(!p||!p.fillText)return!1;switch(p.textBaseline="top",p.font="600 32px Arial",e){case"flag":return s([127987,65039,8205,9895,65039],[127987,65039,8203,9895,65039])?!1:!s([55356,56826,55356,56819],[55356,56826,8203,55356,56819])&&!s([55356,57332,56128,56423,56128,56418,56128,56421,56128,56430,56128,56423,56128,56447],[55356,57332,8203,56128,56423,8203,56128,56418,8203,56128,56421,8203,56128,56430,8203,56128,56423,8203,56128,56447]);case"emoji":return!s([55357,56424,8205,55356,57212],[55357,56424,8203,55356,57212])}return!1}(o[r]),t.supports.everything=t.supports.everything&&t.supports[o[r]],"flag"!==o[r]&&(t.supports.everythingExceptFlag=t.supports.everythingExceptFlag&&t.supports[o[r]]);t.supports.everythingExceptFlag=t.supports.everythingExceptFlag&&!t.supports.flag,t.DOMReady=!1,t.readyCallback=function(){t.DOMReady=!0},t.supports.everything||(n=function(){t.readyCallback()},a.addEventListener?(a.addEventListener("DOMContentLoaded",n,!1),e.addEventListener("load",n,!1)):(e.attachEvent("onload",n),a.attachEvent("onreadystatechange",function(){"complete"===a.readyState&&t.readyCallback()})),(n=t.source||{}).concatemoji?c(n.concatemoji):n.wpemoji&&n.twemoji&&(c(n.twemoji),c(n.wpemoji)))}(window,document,window._wpemojiSettings);
+		</script>
+		<style type="text/css">
+img.wp-smiley,
+img.emoji {
+	display: inline !important;
+	border: none !important;
+	box-shadow: none !important;
+	height: 1em !important;
+	width: 1em !important;
+	margin: 0 .07em !important;
+	vertical-align: -0.1em !important;
+	background: none !important;
+	padding: 0 !important;
+}
+</style>
+	<link rel='stylesheet' id='all-css-0-1' href='https://s0.wp.com/_static/??-eJytkttuwjAMhl9oqVcGm7iY9ixJY3WBnBQ7sL49bguIoY0hsZskPny/bcWwz6pLkTEyhKqyr72LBPvcpaAoOI/DldV0RE9wgZ2YvoppsPQSKQi79rlZNUsw1XkLxqduq7wzRZcBiAeP/yHEnxjuEZoogg1y1iOuh1RZ9cXZu3u5kiiaXezpD7xLR2zRyBQtWEd8dqqf2WkmglwNWO2JUzwOjV8StwTzLfk7LHNbD2j4GiI9qBLQOq1YrF+ELjZr/FLxh6x5zJhQ9FIn8i1sXkFjckEiJWdwNai5wdvlwigtC7OVSSTxu2dGHcTETmg6P8bAR3hvX9v1cvGyeltvDqBqL3w=?cssminify=yes' type='text/css' media='all' />
+<style id='wp-block-library-inline-css'>
+.has-text-align-justify {
+	text-align:justify;
+}
+</style>
+<link rel='stylesheet' id='print-css-1-1' href='https://s1.wp.com/wp-content/themes/pub/varia/print.css?m=1571655471h&cssminify=yes' type='text/css' media='print' />
+<link rel='stylesheet' id='all-css-2-1' href='https://s1.wp.com/_static/??-eJx9jEEOwiAQRS8kTqiNroxnoXREzMAQZmjT24tx00Tj7r/kvQ9rMZ6zYlbQByYUKG2C2ZEoZxDdCI9e5AC/xcXV6CBm/1HNWjynryA1U6iFmAUCsiH2TmO/34O5k4v1X1pxIg59BujWDt/RLV3t2Y7DeBlO9vkCQchPlA==?cssminify=yes' type='text/css' media='all' />
+<link crossorigin="anonymous" rel='stylesheet' id='dalston-fonts-css'  href='https://fonts.googleapis.com/css?family=Crimson+Text%3A400%2C600%2C700%2C400italic%2C600italic&#038;subset=latin%2Clatin-ext' media='all' />
+<link rel='stylesheet' id='all-css-4-1' href='https://s0.wp.com/wp-content/themes/pub/dalston/style.css?m=1614247231h&cssminify=yes' type='text/css' media='all' />
+<style id='jetpack-global-styles-frontend-style-inline-css'>
+@import url('https://fonts.googleapis.com/css?family=Source Sans Pro:regular,bold,italic,bolditalic|Rubik:regular,bold,italic,bolditalic|');:root { --font-headings: Rubik; --font-base: Source Sans Pro; --font-headings-default: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Oxygen-Sans,Ubuntu,Cantarell,"Helvetica Neue",sans-serif; --font-base-default: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Oxygen-Sans,Ubuntu,Cantarell,"Helvetica Neue",sans-serif;}
+</style>
+<link rel='stylesheet' id='all-css-6-1' href='https://s1.wp.com/_static/??-eJxti0EKgCAQAD+ULUaJl+gtJqbG6opr9P3o0CHqNAzMwFmEpdxcbpAOUfDwMTMU4iY2NLECB1Nj9g97y9zB/8Vko0GB5Oktn6kFlxxDGMEjrQbvYEmzVHIclNZy2i9lFDfR?cssminify=yes' type='text/css' media='all' />
+<script crossorigin='anonymous' type='text/javascript' src='https://s1.wp.com/_static/??/wp-content/js/postmessage.js,/wp-content/js/mobile-useragent-info.js?m=1609849039j'></script>
+<script src='https://s1.wp.com/wp-includes/js/dist/vendor/lodash.min.js?m=1597077481h&#038;ver=4.17.19' id='lodash-js'></script>
+<script id='lodash-js-after'>
+window.lodash = _.noConflict();
+</script>
+<script crossorigin='anonymous' type='text/javascript' src='https://s1.wp.com/_static/??-eJylzFsSgjAMheEN2YaOyMCD41paWjAQ0k4veFm99cUFyGPOP1/gEQTySMW6BEsCiynD7tj6CDUFT68JieSGLJd0+m6j5+w4Q6AyIyeYSz2Ni3Mt0cGuGnmRLZiCZOHu/ZoA2brnXx5Vzwe4LtmHA96QN8f4uIrkImrCt87oWVg36UJZBB1r+D2/bVfVqaFpz93QLx/OUZIo'></script>
+<script type='text/javascript'>
+( 'fetch' in window ) || document.write( '<script src="https://s2.wp.com/wp-includes/js/dist/vendor/wp-polyfill-fetch.min.js?m=1612197847h&#038;ver=3.0.0"></scr' + 'ipt>' );( document.contains ) || document.write( '<script src="https://s1.wp.com/wp-includes/js/dist/vendor/wp-polyfill-node-contains.min.js?m=1540208548h&#038;ver=3.42.0"></scr' + 'ipt>' );( window.DOMRect ) || document.write( '<script src="https://s2.wp.com/wp-includes/js/dist/vendor/wp-polyfill-dom-rect.min.js?m=1612197847h&#038;ver=3.42.0"></scr' + 'ipt>' );( window.URL && window.URL.prototype && window.URLSearchParams ) || document.write( '<script src="https://s2.wp.com/wp-includes/js/dist/vendor/wp-polyfill-url.min.js?m=1585663916h&#038;ver=3.6.4"></scr' + 'ipt>' );( window.FormData && window.FormData.prototype.keys ) || document.write( '<script src="https://s1.wp.com/wp-includes/js/dist/vendor/wp-polyfill-formdata.min.js?m=1550600082h&#038;ver=3.0.12"></scr' + 'ipt>' );( Element.prototype.matches && Element.prototype.closest ) || document.write( '<script src="https://s2.wp.com/wp-includes/js/dist/vendor/wp-polyfill-element-closest.min.js?m=1540208548h&#038;ver=2.0.2"></scr' + 'ipt>' );( 'objectFit' in document.documentElement.style ) || document.write( '<script src="https://s0.wp.com/wp-includes/js/dist/vendor/wp-polyfill-object-fit.min.js?m=1615384028h&#038;ver=2.3.4"></scr' + 'ipt>' );
+( "objectFit" in document.documentElement.style ) || document.write( '<script src="https://s2.wp.com/wp-content/plugins/gutenberg-core/v10.5.4/vendor/object-fit-polyfill.min.5f0c4c73.js?m=1618439079h&#038;ver=2.3.5"></scr' + 'ipt>' );
+</script>
+<script type='text/javascript'>
+wp.i18n.setLocaleData( { 'text direction\u0004ltr': [ 'ltr' ] } );
+wp.i18n.setLocaleData( { 'text direction\u0004ltr': [ 'ltr' ] }, 'default' );
+</script>
+<script id='react-js-translations'>
+( function( domain, translations ) {
+	var localeData = translations.locale_data[ domain ] || translations.locale_data.messages;
+	localeData[""].domain = domain;
+	wp.i18n.setLocaleData( localeData, domain );
+} )( "default", { "locale_data": { "messages": { "": {} } } } );
+</script>
+<script src='https://s1.wp.com/wp-content/plugins/gutenberg-core/v10.5.4/vendor/react.min.e713ea3b.js?m=1599596311h' id='react-js'></script>
+<script crossorigin='anonymous' type='text/javascript' src='https://s2.wp.com/_static/??-eJyVjEEKgCAUBS9UviSLWkRnyf5HFDMxrY5fq/Yth2EGV6zXPWQOGdEXY8MBU17UnMxrEuOUjeiEgi7WE4hj4nXJTLCB+BbuqPB7sm9fPW+T7OXYqLYfB/cA0sMyZA=='></script>
+<script id='react-dom-js-translations'>
+( function( domain, translations ) {
+	var localeData = translations.locale_data[ domain ] || translations.locale_data.messages;
+	localeData[""].domain = domain;
+	wp.i18n.setLocaleData( localeData, domain );
+} )( "default", { "locale_data": { "messages": { "": {} } } } );
+</script>
+<script src='https://s1.wp.com/wp-content/plugins/gutenberg-core/v10.5.4/vendor/react-dom.min.de439aae.js?m=1599596311h' id='react-dom-js'></script>
+<script crossorigin='anonymous' type='text/javascript' src='https://s0.wp.com/wp-content/plugins/gutenberg-core/v10.5.4/build/escape-html/index.js?m=1616696995h'></script>
+<script id='wp-element-js-translations'>
+( function( domain, translations ) {
+	var localeData = translations.locale_data[ domain ] || translations.locale_data.messages;
+	localeData[""].domain = domain;
+	wp.i18n.setLocaleData( localeData, domain );
+} )( "default", { "locale_data": { "messages": { "": {} } } } );
+</script>
+<script src='https://s2.wp.com/wp-content/plugins/gutenberg-core/v10.5.4/build/element/index.js?m=1619043698h&#038;ver=f15d2819be3c323679cb7831085abbe3' id='wp-element-js'></script>
+<script id='wpcom-actionbar-placeholder-js-extra'>
+var actionbardata = {"siteID":"180057476","siteName":"YOONHA KIM","siteURL":"https:\/\/yoonha.net","icon":"<img alt='' src='https:\/\/s2.wp.com\/i\/logo\/wpcom-gray-white.png' class='avatar avatar-50' height='50' width='50' \/>","canManageOptions":"","canCustomizeSite":"","isFollowing":"","themeSlug":"pub\/dalston","signupURL":"https:\/\/wordpress.com\/start\/","loginURL":"https:\/\/wordpress.com\/log-in?redirect_to=https%3A%2F%2Fyoonha.net%2F&signup_flow=account&domain=yoonha.net","themeURL":"https:\/\/wordpress.com\/theme\/dalston\/","xhrURL":"https:\/\/yoonha.net\/wp-admin\/admin-ajax.php","nonce":"5e17766d79","isSingular":"1","isFolded":"","isLoggedIn":"","isMobile":"","subscribeNonce":"<input type=\"hidden\" id=\"_wpnonce\" name=\"_wpnonce\" value=\"f5a0cd6ed2\" \/>","referer":"https:\/\/yoonha.net\/","canFollow":"1","feedID":"107807980","statusMessage":"","customizeLink":"https:\/\/yoonhanet.wordpress.com\/wp-admin\/customize.php?url=https%3A%2F%2Fyoonhanet.wordpress.com%2F","postID":"38","shortlink":"https:\/\/wp.me\/PcbvaQ-C","canEditPost":"","editLink":"https:\/\/wordpress.com\/page\/yoonha.net\/38","statsLink":"https:\/\/wordpress.com\/stats\/post\/38\/yoonha.net","i18n":{"view":"View site","follow":"Follow","following":"Following","edit":"Edit","login":"Log in","signup":"Sign up","customize":"Customize","report":"Report this content","themeInfo":"Get theme: Dalston","shortlink":"Copy shortlink","copied":"Copied","followedText":"New posts from this site will now appear in your <a href=\"https:\/\/wordpress.com\/read\">Reader<\/a>","foldBar":"Collapse this bar","unfoldBar":"Expand this bar","editSubs":"Manage subscriptions","viewReader":"View site in Reader","viewReadPost":"View post in Reader","subscribe":"Sign me up","enterEmail":"Enter your email address","followers":"","alreadyUser":"Already have a WordPress.com account? <a href=\"https:\/\/wordpress.com\/log-in?redirect_to=https%3A%2F%2Fyoonha.net%2F&signup_flow=account&domain=yoonha.net\">Log in now.<\/a>","stats":"Stats"}};
+</script>
+<script crossorigin='anonymous' type='text/javascript' src='https://s0.wp.com/_static/??-eJylk91OwzAMRl8INysaoF0gniVtrNZd/ubYW/v2y9i4AyHIlWWdL0eWk5hLhjFFwSgme50oFjNpbQfkqRJGc+533Uu3N4OSd4YKlNl6ny6AJ7XeUHS4dkt5Mn9VHXEbk8PSoMhMiUk2OCkqNojGFHIqLQZGpytwUqHY4nFWbMPxWYKHmiah1s2G6jg3ScqcWG533OAYfBqPPwwhM4Y6YNahrs0XSfEeB1wrd8Xca82fkeET/V/hNcTSJgnoyILU7nvPUgx7gcxp3b4YxdHr7ZdUuNRnztujdIHiryEINLEVfIQ/wnv/2h/e+t1h/7xcASpAdf4='></script>
+<script type='text/javascript'>
+( function() {
+	var userId = 0;
+	var storageKey = "WP_DATA_USER_" + userId;
+	wp.data
+		.use( wp.data.plugins.persistence, { storageKey: storageKey } );
+	wp.data.plugins.persistence.__unstableMigrate( { storageKey: storageKey } );
+} )();
+</script>
+<script type='text/javascript'>
+	window.addEventListener( 'DOMContentLoaded', function() {
+		rltInitialize( {"token":null,"iframeOrigins":["https:\/\/widgets.wp.com"]} );
+	} );
+</script>
+<link rel="EditURI" type="application/rsd+xml" title="RSD" href="https://yoonhanet.wordpress.com/xmlrpc.php?rsd" />
+<link rel="wlwmanifest" type="application/wlwmanifest+xml" href="https://s1.wp.com/wp-includes/wlwmanifest.xml" /> 
+<meta name="generator" content="WordPress.com" />
+<link rel="canonical" href="https://yoonha.net/" />
+<link rel='shortlink' href='https://wp.me/PcbvaQ-C' />
+<link rel="alternate" type="application/json+oembed" href="https://public-api.wordpress.com/oembed/?format=json&amp;url=https%3A%2F%2Fyoonha.net%2F&amp;for=wpcom-auto-discovery" /><link rel="alternate" type="application/xml+oembed" href="https://public-api.wordpress.com/oembed/?format=xml&amp;url=https%3A%2F%2Fyoonha.net%2F&amp;for=wpcom-auto-discovery" />
+<!-- Jetpack Open Graph Tags -->
+<meta property="og:type" content="website" />
+<meta property="og:title" content="YOONHA KIM" />
+<meta property="og:url" content="https://yoonha.net/" />
+<meta property="og:site_name" content="YOONHA KIM" />
+<meta property="og:image" content="https://s0.wp.com/i/blank.jpg" />
+<meta property="og:locale" content="en_US" />
+<meta name="twitter:site" content="@wordpressdotcom" />
+<meta name="twitter:text:title" content="Home" />
+<meta name="twitter:card" content="summary" />
+<meta name="twitter:description" content="Visit the post for more." />
+<meta property="article:publisher" content="https://www.facebook.com/WordPresscom" />
+
+<!-- End Jetpack Open Graph Tags -->
+<link rel="shortcut icon" type="image/x-icon" href="https://s1.wp.com/i/favicon.ico" sizes="16x16 24x24 32x32 48x48" />
+<link rel="icon" type="image/x-icon" href="https://s1.wp.com/i/favicon.ico" sizes="16x16 24x24 32x32 48x48" />
+<link rel="apple-touch-icon" href="https://s2.wp.com/i/webclip.png" />
+<link rel="search" type="application/opensearchdescription+xml" href="https://yoonha.net/osd.xml" title="YOONHA KIM" />
+<link rel="search" type="application/opensearchdescription+xml" href="https://s1.wp.com/opensearch.xml" title="WordPress.com" />
+<meta name="application-name" content="YOONHA KIM" /><meta name="msapplication-window" content="width=device-width;height=device-height" /><meta name="msapplication-task" content="name=Subscribe;action-uri=https://yoonha.net/feed/;icon-uri=https://s1.wp.com/i/favicon.ico" /><meta name="msapplication-task" content="name=Sign up for a free blog;action-uri=http://wordpress.com/signup/;icon-uri=https://s1.wp.com/i/favicon.ico" /><meta name="msapplication-task" content="name=WordPress.com Support;action-uri=http://support.wordpress.com/;icon-uri=https://s1.wp.com/i/favicon.ico" /><meta name="msapplication-task" content="name=WordPress.com Forums;action-uri=http://forums.wordpress.com/;icon-uri=https://s1.wp.com/i/favicon.ico" /><meta name="description" content="The Land of Sun and Life, Chungbuk Turn Off Subscriptions — The Daily Emailer, 2019 — Headless Astronaut Finds Their Head — Whistler Views Magazine, 2016 — The Musuem Of Social Media — Halseytowne Chronicles, 2019 — Put it All in The Clouds — Sofa Bed Examiner, 2018 — Bike On, Bike Off — Whistler&hellip;" />
+<!-- There is no amphtml version available for this URL. --></head>
+
+<body class="home page-template-default page page-id-38 wp-embed-responsive customizer-styles-applied singular image-filters-enabled hide-homepage-title highlander-enabled highlander-light">
+
+
+<div id="page" class="site">
+	<a class="skip-link screen-reader-text" href="#content">Skip to content</a>
+
+	
+<header id="masthead" class="site-header has-title-and-tagline has-menu" role="banner">
+	<div class="site-branding">
+
+			<p class="site-title"><a href="https://yoonha.net/" rel="home">YOONHA KIM</a></p>
+	</div>
+
+		<nav id="site-navigation" class="main-navigation" aria-label="Main Navigation">
+
+		<input type="checkbox" role="button" aria-haspopup="true" id="toggle" class="hide-visually">
+		<label for="toggle" id="toggle-menu" class="button">
+			Menu			<span class="dropdown-icon open">+</span>
+			<span class="dropdown-icon close">&times;</span>
+			<span class="hide-visually expanded-text">expanded</span>
+			<span class="hide-visually collapsed-text">collapsed</span>
+		</label>
+
+		<div class="menu-primary-container"><ul id="menu-primary-1" class="main-menu" aria-label="submenu"><li class="menu-item menu-item-type-post_type menu-item-object-page menu-item-home current-menu-item page_item page-item-38 current_page_item menu-item-19"><a href="https://yoonha.net/" aria-current="page">Home</a></li>
+<li class="menu-item menu-item-type-post_type menu-item-object-page menu-item-20"><a href="https://yoonha.net/blog/">Work</a></li>
+<li class="menu-item menu-item-type-post_type menu-item-object-page menu-item-21"><a href="https://yoonha.net/about/">About</a></li>
+</ul></div>	</nav><!-- #site-navigation -->
+	</header><!-- #masthead -->
+
+	<div id="content" class="site-content">
+
+	<section id="primary" class="content-area">
+		<main id="main" class="site-main">
+
+			
+<article id="post-38" class="post-38 page type-page status-publish hentry entry">
+
+	<header class="entry-header responsive-max-width">
+		
+<h1 class="entry-title">Home</h1>
+	</header>
+
+	
+	<div class="entry-content">
+		
+<div class="wp-block-group alignfull"><div class="wp-block-group__inner-container">
+<div class="wp-block-cover alignfull has-background-dim-70 has-background-dim has-background-gradient is-position-center-center is-style-hover-reveal" style="background-image:url('https://yoonhanet.files.wordpress.com/2020/07/3_00722.jpg');min-height:616px;"><span aria-hidden="true" class="wp-block-cover__gradient-background" style="background:radial-gradient(rgba(252,185,0,1) 0%,rgba(255,105,0,1) 99%);"></span><div class="wp-block-cover__inner-container">
+<h3 class="has-text-align-center margin-bottom-none has-background-color has-text-color has-huge-font-size" id="Title" style="line-height:1.5;"><strong>The Land of Sun and Life, Chungbuk</strong></h3>
+
+
+
+<p></p>
+</div></div>
+</div></div>
+
+
+
+<div class="wp-block-columns alignfull is-style-full-bleed margin-top-none margin-bottom-none">
+<div class="wp-block-column">
+<div class="wp-block-group has-background" style="background-color:#695daf;"><div class="wp-block-group__inner-container">
+<div class="wp-block-cover has-background-dim-80 has-background-dim is-style-hover-reveal" style="background-image:url('https://dalstondemo.files.wordpress.com/2019/09/pale-unsubscribed.png');background-color:#695daf;background-position:50% 50%;"><div class="wp-block-cover__inner-container">
+<h2 class="has-text-align-center margin-bottom-none"><strong><a href="/project-2/">Turn Off Subscriptions</a></strong></h2>
+
+
+
+<p class="has-text-align-center margin-top-none">— <a href="/project-2/">The Daily Emailer, 2019</a> —</p>
+</div></div>
+</div></div>
+</div>
+
+
+
+<div class="wp-block-column">
+<div class="wp-block-group has-background-dark-background-color has-background"><div class="wp-block-group__inner-container">
+<div class="wp-block-cover has-background-dim-90 has-background-dark-background-color has-background-dim is-style-hover-reveal" style="background-image:url('https://dalstondemo.files.wordpress.com/2019/09/no-connection-5.png');background-position:50% 50%;"><div class="wp-block-cover__inner-container">
+<h2 class="has-text-align-center margin-bottom-none has-foreground-dark-color has-text-color"><strong><a href="/project-3/">Headless Astronaut Finds Their Head</a></strong></h2>
+
+
+
+<p class="has-text-color has-text-align-center has-foreground-dark-color margin-top-none">— <a href="https://dalstondemo.wordpress.com/project-3/"><em>Whistler Views Magazine</em>, 2016</a> —</p>
+</div></div>
+
+
+
+<p></p>
+</div></div>
+</div>
+</div>
+
+
+
+<div class="wp-block-group alignfull has-background-background-color has-background"><div class="wp-block-group__inner-container">
+<div class="wp-block-cover alignwide has-background-dim-80 has-background-background-color has-background-dim is-style-hover-reveal" style="background-image:url('https://dalstondemo.files.wordpress.com/2019/09/pale-list-is-empty.png');background-position:50% 50%;"><div class="wp-block-cover__inner-container">
+<h2 class="has-text-align-center margin-bottom-none has-foreground-dark-color has-text-color"><strong><a href="/project-1/">The Musuem Of Social Media</a></strong></h2>
+
+
+
+<p class="has-text-color has-text-align-center has-foreground-dark-color margin-top-none">— <a href="/project-1/"><em>Halseytowne Chronicles</em>, 2019</a> —</p>
+</div></div>
+</div></div>
+
+
+
+<div class="wp-block-columns alignfull is-style-full-bleed margin-top-none margin-bottom-none">
+<div class="wp-block-column">
+<div class="wp-block-group has-background" style="background-color:#f5ede2;"><div class="wp-block-group__inner-container">
+<div class="wp-block-cover has-background-dim-80 has-background-dim is-style-hover-reveal" style="background-image:url('https://dalstondemo.files.wordpress.com/2019/09/pale-uploading.png');background-color:#f5ede2;background-position:50% 50%;"><div class="wp-block-cover__inner-container">
+<h2 class="has-text-align-center margin-bottom-none has-foreground-dark-color has-text-color"><strong><a href="/project-2/">Put it All in The Clouds</a></strong></h2>
+
+
+
+<p class="has-text-color has-text-align-center has-foreground-dark-color margin-top-none">— <a href="/project-2/"><em>Sofa Bed Examiner</em>, 2018</a> —</p>
+</div></div>
+</div></div>
+</div>
+
+
+
+<div class="wp-block-column">
+<div class="wp-block-group has-background" style="background-color:#bbfbc0;"><div class="wp-block-group__inner-container">
+<div class="wp-block-cover has-background-dim-80 has-background-dim is-style-hover-reveal" style="background-image:url('https://dalstondemo.files.wordpress.com/2019/09/pale-fatal-error.png');background-color:#bbfbc0;background-position:50% 50%;"><div class="wp-block-cover__inner-container">
+<h2 class="has-text-align-center margin-bottom-none has-foreground-dark-color has-text-color"><strong><a href="/project-3/">Bike On, Bike Off</a></strong></h2>
+
+
+
+<p class="has-text-color has-text-align-center has-foreground-dark-color margin-top-none">— <a href="/project-3/"><em>Whistler Views Magazine</em>, 2016</a> —</p>
+</div></div>
+</div></div>
+</div>
+</div>
+
+
+
+<div class="wp-block-columns alignfull is-style-full-bleed margin-top-none margin-bottom-none">
+<div class="wp-block-column">
+<div class="wp-block-group has-background-background-color has-background"><div class="wp-block-group__inner-container">
+<div class="wp-block-cover has-background-dim-80 has-background-background-color has-background-dim is-style-hover-reveal" style="background-image:url('https://dalstondemo.files.wordpress.com/2019/09/pale-logged-out.png');background-position:50% 50%;"><div class="wp-block-cover__inner-container">
+<h2 class="has-text-align-center margin-bottom-none has-foreground-dark-color has-text-color"><strong><a href="https://dalstondemo.wordpress.com/project-1/">Don’t Get Unsubscribed</a></strong></h2>
+
+
+
+<p class="has-text-color has-text-align-center has-foreground-dark-color margin-top-none">— <a href="https://dalstondemo.wordpress.com/project-1/"><em>Sofa Bed Examiner</em>, 2018</a> —</p>
+</div></div>
+</div></div>
+</div>
+
+
+
+<div class="wp-block-column">
+<div class="wp-block-group has-background" style="background-color:#d65d58;"><div class="wp-block-group__inner-container">
+<div class="wp-block-cover has-background-dim-80 has-background-dim is-style-hover-reveal" style="background-image:url('https://dalstondemo.files.wordpress.com/2019/09/done-5.png');background-color:#d65d58;background-position:50% 50%;"><div class="wp-block-cover__inner-container">
+<h2 class="has-text-align-center margin-bottom-none has-background-color has-text-color"><strong><a href="https://dalstondemo.wordpress.com/project-2/">Checks Over Stripes</a></strong></h2>
+
+
+
+<p class="has-text-color has-text-align-center has-background-color margin-top-none">— <a href="https://dalstondemo.wordpress.com/project-2/"><em>Hipped Beasts</em>, 2018</a> —</p>
+</div></div>
+</div></div>
+</div>
+
+
+
+<div class="wp-block-column">
+<div class="wp-block-group has-background" style="background-color:#f5ede2;"><div class="wp-block-group__inner-container">
+<div class="wp-block-cover has-background-dim-80 has-background-dim is-style-hover-reveal" style="background-image:url('https://dalstondemo.files.wordpress.com/2019/09/pale-waiting.png');background-color:#f5ede2;"><div class="wp-block-cover__inner-container">
+<h2 class="has-text-align-center margin-bottom-none has-foreground-dark-color has-text-color"><strong><a href="https://dalstondemo.wordpress.com/project-3/">Time Slippin’ Into The Future</a></strong></h2>
+
+
+
+<p class="has-text-color has-text-align-center has-foreground-dark-color margin-top-none">— <a href="https://dalstondemo.wordpress.com/project-3/"><em>Hipped Beasts</em>, 2018</a> —</p>
+</div></div>
+</div></div>
+</div>
+</div>
+<div id="jp-post-flair" class="sharedaddy sd-sharing-enabled"><div class="sharedaddy sd-sharing-enabled"><div class="robots-nocontent sd-block sd-social sd-social-icon-text sd-sharing"><h3 class="sd-title">Share this:</h3><div class="sd-content"><ul><li class="share-twitter"><a rel="nofollow noopener noreferrer" data-shared="sharing-twitter-38" class="share-twitter sd-button share-icon" href="https://yoonha.net/?share=twitter" target="_blank" title="Click to share on Twitter"><span>Twitter</span></a></li><li class="share-facebook"><a rel="nofollow noopener noreferrer" data-shared="sharing-facebook-38" class="share-facebook sd-button share-icon" href="https://yoonha.net/?share=facebook" target="_blank" title="Click to share on Facebook"><span>Facebook</span></a></li><li class="share-end"></li></ul></div></div></div></div>	</div><!-- .entry-content -->
+
+	</article><!-- #post-38 -->
+
+		</main><!-- #main -->
+	</section><!-- #primary -->
+
+
+	</div><!-- #content -->
+
+	
+	<footer id="colophon" class="site-footer responsive-max-width">
+				
+		<div class="site-info">
+		<a class="site-name" href="https://yoonha.net/" rel="home">YOONHA KIM</a><span class="comma">,</span>
+<a href="https://wordpress.com/?ref=footer_custom_svg" title="Create a website or blog at WordPress.com" rel="nofollow"><svg style="fill: currentColor; position: relative; top: 1px;" width="14px" height="15px" viewBox="0 0 14 15" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" aria-labelledby="title" role="img">
+				<desc id="title">Create a website or blog at WordPress.com</desc>
+				<path d="M12.5225848,4.97949746 C13.0138466,5.87586309 13.2934037,6.90452431 13.2934037,7.99874074 C13.2934037,10.3205803 12.0351007,12.3476807 10.1640538,13.4385638 L12.0862862,7.88081544 C12.4453251,6.98296834 12.5648813,6.26504621 12.5648813,5.62667922 C12.5648813,5.39497674 12.549622,5.17994084 12.5225848,4.97949746 L12.5225848,4.97949746 Z M7.86730089,5.04801561 C8.24619178,5.02808979 8.58760099,4.98823815 8.58760099,4.98823815 C8.9267139,4.94809022 8.88671369,4.44972248 8.54745263,4.46957423 C8.54745263,4.46957423 7.52803983,4.54957381 6.86996227,4.54957381 C6.25158863,4.54957381 5.21247202,4.46957423 5.21247202,4.46957423 C4.87306282,4.44972248 4.83328483,4.96816418 5.17254589,4.98823815 C5.17254589,4.98823815 5.49358462,5.02808979 5.83269753,5.04801561 L6.81314716,7.73459399 L5.43565839,11.8651647 L3.14394256,5.04801561 C3.52312975,5.02808979 3.86416859,4.98823815 3.86416859,4.98823815 C4.20305928,4.94809022 4.16305906,4.44972248 3.82394616,4.46957423 C3.82394616,4.46957423 2.80475558,4.54957381 2.14660395,4.54957381 C2.02852925,4.54957381 1.88934333,4.54668493 1.74156477,4.54194422 C2.86690406,2.83350881 4.80113651,1.70529256 6.99996296,1.70529256 C8.638342,1.70529256 10.1302017,2.33173369 11.2498373,3.35765419 C11.222726,3.35602457 11.1962815,3.35261718 11.1683554,3.35261718 C10.5501299,3.35261718 10.1114609,3.89113285 10.1114609,4.46957423 C10.1114609,4.98823815 10.4107217,5.42705065 10.7296864,5.94564049 C10.969021,6.36482346 11.248578,6.90326506 11.248578,7.68133501 C11.248578,8.21992476 11.0413918,8.84503256 10.7696866,9.71584277 L10.1417574,11.8132391 L7.86730089,5.04801561 Z M6.99996296,14.2927074 C6.38218192,14.2927074 5.78595654,14.2021153 5.22195356,14.0362644 L7.11048207,8.54925635 L9.04486267,13.8491542 C9.05760348,13.8802652 9.07323319,13.9089317 9.08989995,13.9358945 C8.43574834,14.1661896 7.73285573,14.2927074 6.99996296,14.2927074 L6.99996296,14.2927074 Z M0.706448182,7.99874074 C0.706448182,7.08630113 0.902152921,6.22015756 1.25141403,5.43749503 L4.25357806,13.6627848 C2.15393732,12.6427902 0.706448182,10.4898387 0.706448182,7.99874074 L0.706448182,7.99874074 Z M6.99996296,0.999 C3.14016476,0.999 0,4.13905746 0,7.99874074 C0,11.8585722 3.14016476,14.999 6.99996296,14.999 C10.8596871,14.999 14,11.8585722 14,7.99874074 C14,4.13905746 10.8596871,0.999 6.99996296,0.999 L6.99996296,0.999 Z" id="wordpress-logo-simplified-cmyk" stroke="none" fill=“currentColor” fill-rule="evenodd"></path>
+			</svg></a>	</div><!-- .site-info -->
+	</footer><!-- #colophon -->
+
+</div><!-- #page -->
+
+<!--  -->
+<script src='//0.gravatar.com/js/gprofiles.js?ver=202121y' id='grofiles-cards-js'></script>
+<script id='wpgroho-js-extra'>
+var WPGroHo = {"my_hash":""};
+</script>
+<script crossorigin='anonymous' type='text/javascript' src='https://s1.wp.com/wp-content/mu-plugins/gravatar-hovercards/wpgroho.js?m=1610363240h'></script>
+
+	<script>
+		// Initialize and attach hovercards to all gravatars
+		( function() {
+			function init() {
+				if ( typeof Gravatar === 'undefined' ) {
+					return;
+				}
+
+				if ( typeof Gravatar.init !== 'function' ) {
+					return;
+				}
+
+				Gravatar.profile_cb = function ( hash, id ) {
+					WPGroHo.syncProfileData( hash, id );
+				};
+
+				Gravatar.my_hash = WPGroHo.my_hash;
+				Gravatar.init( 'body', '#wp-admin-bar-my-account' );
+			}
+
+			if ( document.readyState !== 'loading' ) {
+				init();
+			} else {
+				document.addEventListener( 'DOMContentLoaded', init );
+			}
+		} )();
+	</script>
+
+		<div style="display:none">
+	</div>
+
+<script>
+window.addEventListener( "load", function( event ) {
+	var link = document.createElement( "link" );
+	link.href = "https://s0.wp.com/wp-content/mu-plugins/actionbar/actionbar.css?v=20201002";
+	link.type = "text/css";
+	link.rel = "stylesheet";
+	document.head.appendChild( link );
+
+	var script = document.createElement( "script" );
+	script.src = "https://s0.wp.com/wp-content/mu-plugins/actionbar/actionbar.js?v=20201002";
+	script.defer = true;
+	document.body.appendChild( script );
+} );
+</script>
+
+	
+	<script type="text/javascript">
+		window.WPCOM_sharing_counts = {"https:\/\/yoonha.net\/":38};
+	</script>
+				<script id='comment-like-js-extra'>
+var comment_like_text = {"loading":"Loading..."};
+</script>
+<script id='sharing-js-js-extra'>
+var sharing_js_options = {"lang":"en","counts":"1","is_stats_active":"1"};
+</script>
+<script crossorigin='anonymous' type='text/javascript' src='https://s0.wp.com/_static/??-eJyVzNEOwiAMBdAfkjUY4/TB+C0M6iyjjFBwfr4Yo9GXJT61vc25sCRl51gwFvACDm9kMd07Lxv4enFVKdSRooCdmVukAk0oTxNoAFko4T/oJ1iBxjFFNZgMbKRgbpsq2djpgyjaUN2rtZ3IA7quoZXSNEtRl2Aog1xNpji+Z0NnPum93upjf9j1/gH4uWpQ'></script>
+<script type='text/javascript'>
+var windowOpen;
+			( function () {
+				function matches( el, sel ) {
+					return !! (
+						el.matches && el.matches( sel ) ||
+						el.msMatchesSelector && el.msMatchesSelector( sel )
+					);
+				}
+
+				document.body.addEventListener( 'click', function ( event ) {
+					if ( ! event.target ) {
+						return;
+					}
+
+					var el;
+					if ( matches( event.target, 'a.share-twitter' ) ) {
+						el = event.target;
+					} else if ( event.target.parentNode && matches( event.target.parentNode, 'a.share-twitter' ) ) {
+						el = event.target.parentNode;
+					}
+
+					if ( el ) {
+						event.preventDefault();
+
+						// If there's another sharing window open, close it.
+						if ( typeof windowOpen !== 'undefined' ) {
+							windowOpen.close();
+						}
+						windowOpen = window.open( el.getAttribute( 'href' ), 'wpcomtwitter', 'menubar=1,resizable=1,width=600,height=350' );
+						return false;
+					}
+				} );
+			} )();
+var windowOpen;
+			( function () {
+				function matches( el, sel ) {
+					return !! (
+						el.matches && el.matches( sel ) ||
+						el.msMatchesSelector && el.msMatchesSelector( sel )
+					);
+				}
+
+				document.body.addEventListener( 'click', function ( event ) {
+					if ( ! event.target ) {
+						return;
+					}
+
+					var el;
+					if ( matches( event.target, 'a.share-facebook' ) ) {
+						el = event.target;
+					} else if ( event.target.parentNode && matches( event.target.parentNode, 'a.share-facebook' ) ) {
+						el = event.target.parentNode;
+					}
+
+					if ( el ) {
+						event.preventDefault();
+
+						// If there's another sharing window open, close it.
+						if ( typeof windowOpen !== 'undefined' ) {
+							windowOpen.close();
+						}
+						windowOpen = window.open( el.getAttribute( 'href' ), 'wpcomfacebook', 'menubar=1,resizable=1,width=600,height=400' );
+						return false;
+					}
+				} );
+			} )();
+</script>
+	<script>
+	/(trident|msie)/i.test(navigator.userAgent)&&document.getElementById&&window.addEventListener&&window.addEventListener("hashchange",function(){var t,e=location.hash.substring(1);/^[A-z0-9_-]+$/.test(e)&&(t=document.getElementById(e))&&(/^(?:a|select|input|button|textarea)$/i.test(t.tagName)||(t.tabIndex=-1),t.focus())},!1);
+	</script>
+	<script type="text/javascript">
+// <![CDATA[
+(function() {
+try{
+  if ( window.external &&'msIsSiteMode' in window.external) {
+    if (window.external.msIsSiteMode()) {
+      var jl = document.createElement('script');
+      jl.type='text/javascript';
+      jl.async=true;
+      jl.src='/wp-content/plugins/ie-sitemode/custom-jumplist.php';
+      var s = document.getElementsByTagName('script')[0];
+      s.parentNode.insertBefore(jl, s);
+    }
+  }
+}catch(e){}
+})();
+// ]]>
+</script><script src="//stats.wp.com/w.js?61" defer></script> <script type="text/javascript">
+_tkq = window._tkq || [];
+_stq = window._stq || [];
+_tkq.push(['storeContext', {'blog_id':'180057476','blog_tz':'9','user_lang':'en','blog_lang':'en','user_id':'0'}]);
+_stq.push(['view', {'blog':'180057476','v':'wpcom','tz':'9','user_id':'0','post':'38','subd':'yoonhanet'}]);
+_stq.push(['extra', {'crypt':'UE40eW5QN0p8M2Y/RE1TaVhzUzFMbjdWNHpwZGhTayxPSUFCMGNrd29+Smw0TDhnZmRTK0hlRi9QSGh6bi9GXVhBJWIlZlR5U1JMLU8/MkNtblkvY1dWZmp2VGl5VDVNWEMwZkxUd0JZa0dXUU44emZbbnNDZTZlUkhyRCVUdDhiSWtMNHMvX2tsdWFLeVhqbzNDVXVDOXQlOVk0K11YdyVZQjhMbkVIamdIZ35XL21ZfE89T0FhZEgxK0w1aGIzc3Bvcls2WjM5SGItZXAwaFJKRDBBW2NxcDcuPVZxPUJTdldrZFpCeVhobTUrbkImT0Y9JmpTNTFNRUtiQQ=='}]);
+_stq.push([ 'clickTrackerInit', '180057476', '38' ]);
+	</script>
+<noscript><img src="https://pixel.wp.com/b.gif?v=noscript" style="height:1px;width:1px;overflow:hidden;position:absolute;bottom:1px;" alt="" /></noscript>
+<script>
+if ( 'object' === typeof wpcom_mobile_user_agent_info ) {
+
+	wpcom_mobile_user_agent_info.init();
+	var mobileStatsQueryString = "";
+	
+	if( false !== wpcom_mobile_user_agent_info.matchedPlatformName )
+		mobileStatsQueryString += "&x_" + 'mobile_platforms' + '=' + wpcom_mobile_user_agent_info.matchedPlatformName;
+	
+	if( false !== wpcom_mobile_user_agent_info.matchedUserAgentName )
+		mobileStatsQueryString += "&x_" + 'mobile_devices' + '=' + wpcom_mobile_user_agent_info.matchedUserAgentName;
+	
+	if( wpcom_mobile_user_agent_info.isIPad() )
+		mobileStatsQueryString += "&x_" + 'ipad_views' + '=' + 'views';
+
+	if( "" != mobileStatsQueryString ) {
+		new Image().src = document.location.protocol + '//pixel.wp.com/g.gif?v=wpcom-no-pv' + mobileStatsQueryString + '&baba=' + Math.random();
+	}
+	
+}
+</script>
+</body>
+</html>
